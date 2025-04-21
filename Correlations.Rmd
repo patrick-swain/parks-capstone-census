@@ -1,0 +1,375 @@
+---
+title: "Correlations"
+output: html_document
+date: "2025-04-15"
+---
+
+```{r}
+# Load libraries
+install.packages("corrplot")
+install.packages("readr")
+```
+
+
+```{r}
+library(corrplot)
+library(readr)
+library(dplyr)
+
+# Load data
+df <- read_csv("Parks_Master.csv")
+indexed_census <- read_csv("indexed_census.csv") 
+```
+
+
+```{r}
+# Select variables of interest only (refined list)
+df <- left_join(df, indexed_census %>% select(updatepknm, median_age), by = "updatepknm")
+
+df_selected <- df %>%
+  select(
+    Tree_Canopy_Park,
+    Tree_Canopy_Walkshed,
+    Pollution_Park,
+    Pollution_Walkshed,
+    Sewershed_Park,
+    Sewershed_Walkshed,
+    sum_Vacant_pct,
+    sum_Occupied_pct,
+    TotalCrimeDensity_Walksheds,
+    ViolentCrimeDensity_Walksheds,
+    NonViolentCrimeDensity_Walksheds,
+    TotalCrimeDensity_Parks,
+    ViolentCrimeDensity_Parks,
+    NonViolentCrimeDensity_Parks,
+    asthma_rate,
+    depression_rate,
+    diabetes_rate,
+    obesity_rate,
+    sum_White.alone_pct,
+    sum_Black.or.African.American.alone_pct,
+    sum_Hispanic.or.Latino_pct,
+    sum_Asian.alone_pct,
+    median_age,
+    sum_Below.poverty.level._pct
+  )
+
+# Drop rows with NA values for correlation
+df_numeric <- na.omit(df_selected)
+
+# Compute correlation matrix
+cor_matrix <- cor(df_numeric, use = "complete.obs")
+
+# Plot refined correlation heatmap
+corrplot(cor_matrix, method = "color", 
+         type = "upper", tl.col = "black", 
+         tl.srt = 45, addCoef.col = "black",
+         col = colorRampPalette(c("red", "white", "blue"))(200),
+         mar = c(0, 0, 2, 0),
+         number.cex = 0.7)
+
+# Mask weak and perfect correlations
+cor_filtered <- cor_matrix
+cor_filtered[abs(cor_filtered) < 0.5 | abs(cor_filtered) > 0.999] <- NA
+
+# Plot and save enhanced heatmap
+png("correlation_heatmap.png", width = 3000, height = 2000, res = 220)
+corrplot(cor_filtered,
+         method = "color",
+         type = "upper",
+         col = colorRampPalette(c("red", "white", "blue"))(200),
+         tl.col = "black",
+         tl.srt = 45,
+         addCoef.col = "black",
+         number.cex = 0.7,
+         na.label = " ",
+         diag = FALSE,
+         outline = TRUE,
+         addgrid.col = "grey70",
+         mar = c(1, 1, 2, 1))
+dev.off()
+```
+
+
+```{r}
+# Convert correlation matrix to a long-form data frame
+cor_long <- as.data.frame(as.table(cor_matrix))
+
+# Filter to exclude self-correlations and perfect ones
+cor_long_filtered <- cor_long %>%
+  filter(Var1 != Var2) %>%
+  filter(abs(Freq) < 0.9999) %>%
+  filter(abs(Freq) >= 0.5)
+
+# Remove duplicate pairs (e.g., A-B and B-A)
+cor_long_filtered <- cor_long_filtered %>%
+  rowwise() %>%
+  mutate(pair = paste(sort(c(Var1, Var2)), collapse = "_")) %>%
+  distinct(pair, .keep_all = TRUE) %>%
+  ungroup()
+
+# Sort by descending correlation strength
+top_corrs <- cor_long_filtered %>%
+  arrange(desc(abs(Freq))) %>%
+  select(Var1, Var2, Correlation = Freq)
+
+# View or export
+print(top_corrs)
+# write.csv(top_corrs, "Top_Correlations.csv", row.names = FALSE)
+
+```
+```{r}
+# Install required packages (if not already installed)
+install.packages(c("corrplot", "readr", "dplyr", "ggplot2", "gridExtra"))
+```
+
+
+```{r}
+library(corrplot)
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+
+# --- Load and prepare data ---
+df <- read_csv("Parks_Master.csv")
+indexed_census  <- read_csv("indexed_census.csv")
+
+df <- left_join(df, indexed_census %>% select(updatepknm, median_age), by = "updatepknm")
+
+df_selected <- df %>%
+  select(
+    Tree_Canopy_Park,
+    Tree_Canopy_Walkshed,
+    Pollution_Park,
+    Pollution_Walkshed,
+    Sewershed_Park,
+    Sewershed_Walkshed,
+    sum_Vacant_pct,
+    sum_Occupied_pct,
+    TotalCrimeDensity_Walksheds,
+    ViolentCrimeDensity_Walksheds,
+    NonViolentCrimeDensity_Walksheds,
+    TotalCrimeDensity_Parks,
+    ViolentCrimeDensity_Parks,
+    NonViolentCrimeDensity_Parks,
+    asthma_rate,
+    depression_rate,
+    diabetes_rate,
+    obesity_rate,
+    sum_White.alone_pct,
+    sum_Black.or.African.American.alone_pct,
+    sum_Hispanic.or.Latino_pct,
+    sum_Asian.alone_pct,
+    median_age,
+    sum_Below.poverty.level._pct
+  )
+
+df_numeric <- na.omit(df_selected)
+cor_matrix <- cor(df_numeric, use = "complete.obs")
+
+# --- Get top correlations ---
+cor_long <- as.data.frame(as.table(cor_matrix)) %>%
+  filter(Var1 != Var2, abs(Freq) < 0.999) %>%
+  rowwise() %>%
+  mutate(pair = paste(sort(c(Var1, Var2)), collapse = " ⟷ ")) %>%
+  distinct(pair, .keep_all = TRUE) %>%
+  ungroup() %>%
+  arrange(desc(abs(Freq))) %>%
+  filter(abs(Freq) >= 0.5)
+
+top_n <- 24
+top_corrs <- cor_long[1:top_n, c("pair", "Freq")]
+colnames(top_corrs) <- c("Pair", "Correlation")
+
+# --- Plot with ggplot ---
+plot <- ggplot(top_corrs, aes(x = reorder(Pair, Correlation), y = Correlation, fill = Correlation)) +
+  geom_col(show.legend = FALSE, width = 0.7) +
+  coord_flip() +
+  scale_fill_gradient2(low = "red", mid = "white", high = "blue", midpoint = 0) +
+  geom_text(aes(label = round(Correlation, 2)), hjust = ifelse(top_corrs$Correlation > 0, -0.1, 1.1), size = 4) +
+  labs(title = "Top Correlations (Excl. Perfect)",
+       subtitle = paste("Top", top_n, "non-perfect variable correlations"),
+       x = NULL,
+       y = "Correlation Coefficient") +
+  theme_minimal(base_size = 13) +
+  theme(
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    plot.title = element_text(face = "bold", size = 16),
+    plot.subtitle = element_text(size = 12),
+    axis.text.y = element_text(size = 11)
+  ) +
+  ylim(-1, 1)
+
+# --- Save the plot ---
+ggsave("Top_Correlation_Barchart.png", plot, width = 20, height = 10, dpi = 300)
+
+```
+```{r}
+# Load necessary libraries
+library(tidyverse)
+library(randomForest)
+library(caret)
+
+# Load dataset
+df <- read.csv("Parks_Master.csv")
+
+# Define age band midpoints
+age_columns <- c(
+  "sum_Under.5.years_pct" = 2.5,
+  "sum_X5.to.9.years_pct" = 7,
+  "sum_X10.to.14.years_pct" = 12,
+  "sum_X15.to.19.years_pct" = 17,
+  "sum_X20.to.24.years_pct" = 22,
+  "sum_X25.to.29.years_pct" = 27,
+  "sum_X30.to.34.years_pct" = 32,
+  "sum_X35.to.39.years_pct" = 37,
+  "sum_X40.to.44.years_pct" = 42,
+  "sum_X45.to.49.years_pct" = 47,
+  "sum_X50.to.54.years_pct" = 52,
+  "sum_X55.to.59.years_pct" = 57,
+  "sum_X60.to.64.years_pct" = 62,
+  "sum_X65.to.69.years_pct" = 67,
+  "sum_X70.to.74.years_pct" = 72,
+  "sum_X75.to.79.years_pct" = 77,
+  "sum_X80.to.84.years_pct" = 82,
+  "sum_X85.years.and.over_pct" = 87
+)
+
+# Calculate median_age proxy
+df$median_age_proxy <- rowSums(
+  sapply(names(age_columns), function(col) df[[col]] * age_columns[[col]]),
+  na.rm = TRUE
+)
+
+# Feature selection
+features <- c(
+  "Tree_Canopy_Park", "Tree_Canopy_Walkshed", "Pollution_Park", "Pollution_Walkshed",
+  "Sewershed_Park", "Sewershed_Walkshed", "sum_Vacant_pct", "sum_Occupied_pct",
+  "TotalCrimeDensity_Walksheds", "ViolentCrimeDensity_Walksheds", "NonViolentCrimeDensity_Walksheds",
+ # "ViolentCrimeDensity_Parks", "NonViolentCrimeDensity_Parks",
+  "asthma_rate", "depression_rate", "diabetes_rate", "obesity_rate",
+  "sum_White.alone_pct", "sum_Black.or.African.American.alone_pct",
+  "sum_Hispanic.or.Latino_pct", "sum_Asian.alone_pct",
+  "median_age_proxy", "sum_Below.poverty.level._pct"
+)
+
+# Drop rows with missing target or feature values
+df_model <- df %>%
+  select(all_of(c(features, "TotalCrimeDensity_Parks"))) %>%
+  drop_na()
+
+# Split data into train and test
+set.seed(42)
+train_index <- createDataPartition(df_model$TotalCrimeDensity_Parks, p = 0.8, list = FALSE)
+train_data <- df_model[train_index, ]
+test_data <- df_model[-train_index, ]
+
+# Train random forest model
+rf_model <- randomForest(
+  TotalCrimeDensity_Parks ~ .,
+  data = train_data,
+  na.action = na.omit
+)
+
+# Predict and evaluate
+predictions <- predict(rf_model, test_data)
+rmse <- sqrt(mean((predictions - test_data$TotalCrimeDensity_Parks)^2))
+r2 <- cor(predictions, test_data$TotalCrimeDensity_Parks)^2
+
+cat("RMSE:", rmse, "\n")
+cat("R²:", r2, "\n")
+```
+```{r}
+# Feature importance
+importance_vals <- importance(rf_model)
+importance_df <- data.frame(
+  Feature = rownames(importance_vals),
+  Importance = importance_vals[, 1]
+) %>%
+  arrange(desc(Importance))
+
+# Plot feature importance
+library(ggplot2)
+ggplot(importance_df, aes(x = reorder(Feature, Importance), y = Importance)) +
+  geom_col(fill = "steelblue") +
+  coord_flip() +
+  labs(title = "Feature Importance (Random Forest)",
+       x = "Features", y = "Importance (IncMSE)") +
+  theme_minimal()
+ggsave("Crime_RF_FeatureImportance.png", plot, width = 20, height = 10, dpi = 300)
+```
+```{r}
+library(tidyverse)
+library(randomForest)
+library(caret)
+
+# Use only selected variables
+selected_vars <- c(
+  "Tree_Canopy_Park", "Tree_Canopy_Walkshed",
+  "Pollution_Park", "Pollution_Walkshed",
+  "Sewershed_Park", "Sewershed_Walkshed",
+  "sum_Vacant_pct", "sum_Occupied_pct",
+  "TotalCrimeDensity_Walksheds", "ViolentCrimeDensity_Walksheds", "NonViolentCrimeDensity_Walksheds",
+  "ViolentCrimeDensity_Parks", "NonViolentCrimeDensity_Parks",
+  "asthma_rate", "depression_rate", "diabetes_rate", "obesity_rate",
+  "sum_White.alone_pct", "sum_Black.or.African.American.alone_pct",
+  "sum_Hispanic.or.Latino_pct", "sum_Asian.alone_pct",
+  "median_age", "sum_Below.poverty.level._pct"
+)
+
+df <- df %>%
+  select(any_of(selected_vars)) %>%
+  drop_na()
+
+# Initialize results
+results <- list()
+
+# Loop through each selected variable as target
+for (target_var in selected_vars) {
+  feature_vars <- setdiff(selected_vars, target_var)
+  
+  # Prepare model data
+  df_model <- df %>%
+    select(all_of(c(target_var, feature_vars)))
+
+  # Skip if too few rows
+  if (nrow(df_model) < 50) next
+
+  # Split
+  set.seed(42)
+  train_idx <- createDataPartition(df_model[[target_var]], p = 0.8, list = FALSE)
+  train_data <- df_model[train_idx, ]
+  test_data <- df_model[-train_idx, ]
+
+  # Train Random Forest
+  formula_str <- as.formula(paste(target_var, "~ ."))
+  rf_model <- randomForest(formula_str, data = train_data)
+
+  # Predict
+  preds <- predict(rf_model, test_data)
+  actuals <- test_data[[target_var]]
+
+  # Metrics
+  rmse <- sqrt(mean((preds - actuals)^2))
+  r2 <- cor(preds, actuals)^2
+
+  results[[target_var]] <- data.frame(
+    Target = target_var,
+    RMSE = rmse,
+    R2 = r2
+  )
+}
+
+# Combine and show results
+results_df <- bind_rows(results) %>%
+  arrange(desc(R2))
+
+print(results_df)
+
+# Save to CSV (optional)
+write.csv(results_df, "rf_results.csv", row.names = FALSE)
+
+```
+

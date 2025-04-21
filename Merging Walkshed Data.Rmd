@@ -1,0 +1,80 @@
+---
+title: "Index Walkshed Data"
+output: html_document
+date: "2025-03-14"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+census <- read.csv("attached_census.csv")
+```
+
+```{r}
+# Indexing
+
+# Convert age count columns to median age
+
+# List of age columns and their corresponding midpoint values
+age_columns <- c('sum_Under.5.years', 'sum_X5.to.9.years', 'sum_X10.to.14.years', 'sum_X15.to.19.years', 'sum_X20.to.24.years', 'sum_X25.to.29.years', 'sum_X30.to.34.years', 'sum_X35.to.39.years', 'sum_X40.to.44.years', 'sum_X45.to.49.years', 'sum_X50.to.54.years', 'sum_X55.to.59.years', 'sum_X60.to.64.years', 'sum_X65.to.69.years', 'sum_X70.to.74.years', 'sum_X75.to.79.years', 'sum_X80.to.84.years', 'sum_X85.years.and.over')
+age_midpoints <- c(3, 7, 12, 17,22,27,32,37,42,47,52,57,62,67,72,77,82,87)
+
+# Create a new dataset for the median ages
+median_age_data <- census %>%
+  rowwise() %>%
+  mutate(median_age = weighted.mean(age_midpoints, c_across(all_of(age_columns)))) %>%
+  ungroup() %>%
+  select(updatepknm, median_age)
+
+# List of metric columns to rank by
+metric_columns <- c('sum_Hispanic.or.Latino_pct', 'sum_White.alone_pct', 'sum_Black.or.African.American.alone_pct','sum_Asian.alone_pct','sum_Below.poverty.level._pct','sum_Vacant_pct')
+
+# Create a new dataset for the scaled indexes
+indexed_data <- census %>%
+  select(updatepknm)  # Include the name column
+
+for (metric_col in metric_columns) {
+  indexed_data <- indexed_data %>%
+    mutate(!!paste0('scaled_index_', metric_col) := scale(census[[metric_col]]))
+}
+
+# Join median_age_data with indexed_data by 'updatepknm.x'
+indexed_data <- indexed_data %>%
+  inner_join(median_age_data, by = "updatepknm")
+
+# Rename column in indexed_data
+names(indexed_data)[names(indexed_data) == "SiteName.x"] <- "updatepknm"
+
+for (col in names(indexed_data)) {
+  if (col != "updatepknm") {
+    ranked_col_name <- paste0("rank_", col)  # New column name
+    indexed_data[[ranked_col_name]] <- rank(indexed_data[[col]], ties.method = "min")
+  }
+}
+
+# Export combined data to CSV
+write.csv(indexed_data, "indexed_census.csv", row.names = FALSE)
+```
+
+```{r}
+# Merging
+
+crime_parks <- read.csv("CrimeInParks.csv")
+crime_walksheds <- read.csv("CrimeInWalksheds.csv")
+environment <- read.csv("EnvironmentalFinalized3.csv")
+health <- read.csv("publichealth_walksheds.csv")
+
+# List your loaded datasets
+datasets <- list(census, crime_parks, crime_walksheds, environment,health)  
+
+# Merge datasets by 'updatepknm'
+master_data <- Reduce(function(x, y) merge(x, y, by = "updatepknm", all = TRUE), datasets)
+
+# Export the merged dataset as a CSV file
+write.csv(master_data, "master_data.csv", row.names = FALSE)
+
+cat("Data merged successfully into 'master_data.csv'")
+```
+

@@ -1,0 +1,308 @@
+---
+title: "Attachment"
+output: html_document
+date: "2025-03-09"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list=ls())
+```
+
+
+```{r}
+# Load necessary libraries
+library(sf)
+library(tidyverse)
+library(areal)  # For aerial interpolation
+
+# Load the spatial data
+parks <- st_read("Walkshed differences.geojson")
+census_tracts <- st_read("/Users/swain/Documents/R/Capstone/tracts.geojson")
+census_data <- read.csv("Census/cleaned_data.csv")
+
+# Ensure CRS consistency
+common_crs <- st_crs(parks)  # Use the CRS of the parks layer
+census_tracts <- st_transform(census_tracts, common_crs)
+
+# Remove periods in tract numbers
+library(stringr)
+str_replace_all(census_tracts$NAMELSAD, fixed("."), "")
+
+# Rename tract name column
+colnames(census_tracts)[colnames(census_tracts) == "NAMELSAD"] <- "tract_number"
+colnames(census_data)[colnames(census_data) == "Tract"] <- "tract_number"
+
+# Clean 'tract_number' column to retain only numeric characters
+census_tracts <- census_tracts %>%
+  mutate(tract_number = gsub("[^0-9]", "", tract_number))
+
+census_data <- census_data %>% drop_na(tract_number)
+census_tracts <- census_tracts %>% drop_na(tract_number)
+
+census_tracts$tract_number <- as.numeric(census_tracts$tract_number)
+census_data$tract_number <- as.numeric(census_data$tract_number)
+```
+
+```{r}
+# Convert tract numbers to character (string)
+census_tracts$tract_number <- as.character(census_tracts$tract_number)
+census_data$tract_number <- as.character(census_data$tract_number)
+
+# Standardize tract numbers: remove leading and trailing zeros and ensure length matches
+census_data$tract_number <- sub("^0+|0+$", "", census_data$tract_number)
+census_tracts$tract_number <- sub("^0+|0+$", "", census_tracts$tract_number)
+census_data$tract_number <- as.character(as.numeric(census_data$tract_number))
+census_tracts$tract_number <- as.character(as.numeric(census_tracts$tract_number))
+
+# Merge datasets 
+census_tracts <- census_tracts %>%
+  left_join(census_data, by = "tract_number")
+
+```
+
+```{r}
+# Create a list of extensive and intensive variables
+
+colnames(census_data)
+extensive_vars <- c("Total",                                               
+"Hispanic.or.Latino"                                  
+,"Not.Hispanic.or.Latino"                              
+,"Population.of.one.race"                              
+,"White.alone"                             
+,"Black.or.African.American.alone"                     
+,"American.Indian.and.Alaska.Native.alone"             
+,"Asian.alone"                                         
+,"Native.Hawaiian.and.Other.Pacific.Islander.alone"    
+,"Some.Other.Race.alone"                               
+,"Population.of.two.or.more.races"                     
+,"Total.parcels"                                       
+,"Occupied"                                            
+,"Vacant"                                              
+,"Poverty.status.determined.total"                     
+,"Below.poverty.level."                                
+,"Under.5.years"                                       
+,"X5.to.9.years"                                       
+,"X10.to.14.years"                                     
+,"X15.to.19.years"                                     
+,"X20.to.24.years"                                     
+,"X25.to.29.years"                                     
+,"X30.to.34.years"                                     
+,"X35.to.39.years"                                     
+,"X40.to.44.years"                                     
+,"X45.to.49.years"                                     
+,"X50.to.54.years"                                     
+,"X55.to.59.years"                                     
+,"X60.to.64.years"                                     
+,"X65.to.69.years"                                     
+,"X70.to.74.years"                                     
+,"X75.to.79.years"                                     
+,"X80.to.84.years"                                     
+,"X85.years.and.over") 
+intensive_vars <- c("Occupied...."                                        
+,"Vacant...."                                          
+,"Hispanic.or.Latino...."                              
+,"Not.Hispanic.or.Latino...."                          
+,"Population.of.one.race...."                          
+,"White.alone...."                                     
+,"Black.or.African.American.alone...."                 
+,"American.Indian.and.Alaska.Native.alone...."         
+,"Asian.alone...."                                     
+,"Native.Hawaiian.and.Other.Pacific.Islander.alone...."
+,"Some.Other.Race.alone...."                           
+,"Population.of.two.or.more.races...."                 
+,"Below.poverty.level...."                             
+,"Under.5.years...."                                   
+,"X5.to.9.years...."                                   
+,"X10.to.14.years...."                                 
+,"X15.to.19.years...."                                 
+,"X20.to.24.years...."                                 
+,"X25.to.29.years...."                                 
+,"X30.to.34.years...."                                 
+,"X35.to.39.years...."                                 
+,"X40.to.44.years...."                                 
+,"X45.to.49.years...."                                 
+,"X50.to.54.years...."                                 
+,"X55.to.59.years...."                                 
+,"X60.to.64.years...."                                 
+,"X65.to.69.years...."                                 
+,"X70.to.74.years...."                                 
+,"X75.to.79.years...."                                 
+,"X80.to.84.years...."                                 
+,"X85.years.and.over...." )  
+
+# Drop intensive variables - we just need counts for interpolation
+census_tracts = census_tracts[,!(names(census_tracts) %in% intensive_vars)] 
+```
+
+```{r}
+# Data validation, CRS issues, making planar
+ar_validate(
+  target = parks,
+  source = census_tracts,
+  varList = c(extensive_vars, intensive_vars),  
+  verbose = TRUE
+)
+
+parks <- sf::st_transform(parks, 32633)
+census_tracts <- sf::st_transform(census_tracts, 32633)
+
+ar_validate(
+  target = parks,
+  source = census_tracts,
+  varList = c(extensive_vars, intensive_vars),
+  verbose = TRUE
+)
+
+# Eliminate tracts with no residents
+
+remove_zero_or_na_rows <- function(df) {
+  df <- df[!(is.na(df$Total) | df$Total == 0), ]
+  return(df)
+}
+#census_tracts <- remove_zero_or_na_rows(census_tracts)
+```
+
+```{r}
+# Create dataset of polygons of intersections of tracts and walksheds
+
+intersection <- st_intersection(census_tracts, parks)
+intersection$area <- st_area(intersection)
+census_tracts$area <- st_area(census_tracts)
+```
+
+```{r}
+# For counts, divide area of intersection by tract area then multiply the ratio by the count for each tract in the walkshed
+
+clean_numeric <- function(x) {
+  x <- as.character(x)                     # Convert factors to characters
+  x <- gsub("[^0-9.]", "", x)             # Remove non-numeric characters
+  x <- ifelse(x == "", NA, x)             # Replace empty strings with NA
+  as.numeric(x)                           # Convert to numeric
+}
+
+# Clean 'area' and 'Total'
+census_tracts$area <- clean_numeric(census_tracts$area)
+census_tracts$Total <- clean_numeric(census_tracts$Total)
+
+# Apply cleaning and conversion to each extensive variable column
+intersection[extensive_vars] <- lapply(intersection[extensive_vars], clean_numeric)
+```
+
+```{r}
+
+# Convert area from m^2 to acres
+#census_tracts <- census_tracts %>%
+#  mutate(area = area / 4046.85642)
+
+# Calculate population density
+census_tracts$pop_density <- census_tracts$Total / census_tracts$area
+
+# Calculate the proportion of intersection area relative to the census tract's area
+intersection$area_ratio <- ifelse(!is.na(intersection$area), 
+                                  as.numeric(intersection$area) / 
+                                  census_tracts$area[match(intersection$tract_number, census_tracts$tract_number)], 
+                                  0)
+
+
+intersection$pop_weighted_ratio <- intersection$area_ratio * 
+                                   census_tracts$Total[match(intersection$tract_number, census_tracts$tract_number)]
+
+# Ensure numeric data
+intersection$pop_weighted_ratio <- as.numeric(intersection$pop_weighted_ratio)
+intersection[extensive_vars] <- lapply(intersection[extensive_vars], function(x) as.numeric(as.character(x)))
+
+# Perform population-weighted interpolation
+for (var in extensive_vars) {
+  intersection[[var]] <- intersection[[var]] * intersection$area_ratio
+}
+
+# Final step - summarize interpolated values by objectid
+
+# Summarize extensive variables and include 'updatepknm'
+summary_data <- intersection %>%
+  group_by(fid) %>%
+  summarise(
+    updatepknm = first(SiteName),
+    across(all_of(extensive_vars), ~sum(.x, na.rm = TRUE), .names = "sum_{.col}")
+  ) %>%
+  mutate(
+    # Population-based percentages for all extensive variables except specified ones
+    across(setdiff(names(.)[grepl("^sum_", names(.))], 
+                   c("sum_Total.parcels", "sum_Vacant", "sum_Occupied")),
+           ~ .x / sum_Total * 100, .names = "{.col}_pct"),
+    
+    # Parcel-based percentages for specific variables
+    across(c(sum_Total.parcels, sum_Vacant, sum_Occupied),
+           ~ .x / sum_Total.parcels * 100, .names = "{.col}_pct")
+  )
+
+write.csv(summary_data, "attached_census.csv", row.names = FALSE)
+
+```
+```{r}
+summary(intersection$area_ratio)
+```
+
+```{r}
+# Function to convert data frame to GeoJSON and save to file
+write_geojson <- function(data, filename, lon_col = "longitude", lat_col = "latitude", 
+                          crs = 4326, pretty = TRUE) {
+  
+  # Check if sf package is installed
+  if (!requireNamespace("sf", quietly = TRUE)) {
+    stop("Package 'sf' is needed. Install with install.packages('sf')")
+  }
+  
+  # Check if jsonlite package is installed
+  if (!requireNamespace("jsonlite", quietly = TRUE)) {
+    stop("Package 'jsonlite' is needed. Install with install.packages('jsonlite')")
+  }
+  
+  # Make sure longitude and latitude columns exist
+  if (!lon_col %in% colnames(data) || !lat_col %in% colnames(data)) {
+    # Check if data might already be spatial
+    if (inherits(data, "sf")) {
+      sf_data <- data
+    } else {
+      stop(paste("Columns", lon_col, "and/or", lat_col, "not found in the data frame"))
+    }
+  } else {
+    # Convert data frame to sf object
+    sf_data <- sf::st_as_sf(data, 
+                            coords = c(lon_col, lat_col), 
+                            crs = crs)
+  }
+  
+  # Convert to GeoJSON format
+  geojson <- sf::st_write(sf_data, 
+                          filename, 
+                          driver = "GeoJSON",
+                          delete_dsn = TRUE)
+  
+  # Pretty-print if requested
+  if (pretty) {
+    # Read the GeoJSON file
+    geojson_text <- readLines(filename)
+    geojson_text <- paste(geojson_text, collapse = "")
+    
+    # Parse and pretty-print
+    json_parsed <- jsonlite::fromJSON(geojson_text, simplifyVector = FALSE)
+    jsonlite::write_json(json_parsed, filename, pretty = TRUE, auto_unbox = TRUE)
+  }
+  
+  message("GeoJSON file successfully created: ", filename)
+  return(invisible(filename))
+}
+
+write_geojson(summary_data, "attached_census.geojson")
+```
+```{r}
+# Step 1: Drop the geometry column from the sf object
+summary_data <- sf::st_drop_geometry(summary_data)
+
+# Step 2: Write the dataset to CSV
+write.csv(summary_data, "attached_census.csv", row.names = FALSE)
+```
+```
+

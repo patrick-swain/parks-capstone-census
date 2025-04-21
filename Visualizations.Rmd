@@ -1,0 +1,420 @@
+
+```{r}
+# Load required libraries
+library(ggplot2)
+library(dplyr)
+library(reshape2)
+library(RColorBrewer)
+library(viridis)
+library(ggpubr)
+
+# Load data
+indexed_df <- read.csv("indexed_census.csv")
+attached_df <- read.csv("census_data.csv")
+
+# Exclude blank and NA values
+indexed_df <- indexed_df %>% filter(complete.cases(.))
+
+# ---------- GRAPH 2: Poverty Levels vs. Median Age Scatter Plot with Custom Gradient ----------
+poverty_vs_age <- ggplot(indexed_df, aes(x = median_age, y = scaled_index_sum_Below.poverty.level._pct, color = median_age)) +
+  geom_point(alpha = 0.6, size = 4) +
+  geom_smooth(method = "lm", color = "darkgray", se = FALSE) +
+  stat_cor(method = "pearson", label.x = 30, label.y = 2.5, size = 5) +  # R-squared label
+  scale_color_gradientn(colors = c("#0571b0", "#92c5de", "#f7f7f7", "#f4a582", "#ca0020")) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    axis.text = element_text(size = 12),
+    axis.title = element_text(size = 14)
+  ) +
+  ggtitle("Poverty Levels vs. Median Age in Park Walksheds") +
+  xlab("Median Age") +
+  ylab("Poverty Index z-score")
+
+# ---------- GRAPH 3: Parks Ranked by Vacancy with Sequential Blues ----------
+vacancy_ranked <- attached_df %>%
+  arrange(desc(sum_Vacant_pct)) %>%
+  slice(c(1:10, (n() - 9):n()))
+
+vacancy <- ggplot(vacancy_ranked, aes(x = reorder(updatepknm, sum_Vacant_pct), y = sum_Vacant_pct, fill = sum_Vacant_pct)) +
+  geom_bar(stat = "identity") +
+  scale_fill_gradient(low = "#cce7ff", high = "#00509e") +
+  coord_flip() +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0, margin = margin(b = 10)),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12),
+    legend.position = "bottom"
+  ) +
+  ggtitle("Parks Ranked by % Vacant Parcels (Top and Bottom 10)") +
+  xlab("Park Name") +
+  ylab("% Vacancy") +
+  labs(fill = "Vacancy")
+
+# ---------- GRAPH 4: Parks Ranked by Black Population (Diverging Reds) ----------
+black_ranked <- attached_df %>%
+  arrange(desc(sum_Black.or.African.American.alone_pct)) %>%
+  slice(c(1:10, (n() - 9):n()))
+
+black_ranking <- ggplot(black_ranked, aes(x = reorder(updatepknm, sum_Black.or.African.American.alone_pct), 
+                         y = sum_Black.or.African.American.alone_pct, 
+                         fill = sum_Black.or.African.American.alone_pct)) +
+  geom_bar(stat = "identity") +
+  scale_fill_gradient(low = "#ffeda0", high = "#f03b20") +
+  coord_flip() +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0, margin = margin(b = 10)),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12),
+    legend.position = "bottom"
+  ) +
+  ggtitle("Parks Ranked by % Black Population (Top and Bottom 10)") +
+  xlab("Park Name") +
+  ylab("% Black Population") 
+
+# ---------- GRAPH 5: Hispanic Population (Muted Reds-Yellows) ----------
+hispanic_ranked <- attached_df %>%
+  arrange(desc(sum_Hispanic.or.Latino_pct)) %>%
+  slice(c(1:10, (n() - 9):n()))
+
+hispanic_ranking <- ggplot(hispanic_ranked, aes(x = reorder(updatepknm, sum_Hispanic.or.Latino_pct), 
+                            y = sum_Hispanic.or.Latino_pct, 
+                            fill = sum_Hispanic.or.Latino_pct)) +
+  geom_bar(stat = "identity") +
+  scale_fill_gradient(low = "#ffeda0", high = "#f03b20") +
+  coord_flip() +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0, margin = margin(b = 10)),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12),
+    legend.position = "bottom"
+  ) +
+  ggtitle("Parks Ranked by % Hispanic Population (Top and Bottom 10)") +
+  xlab("Park Name") +
+  ylab("% Hispanic Population")
+
+# ---------- GRAPH 4: Parks Ranked by White Population Index ----------
+white_ranked <- attached_df %>%
+  arrange(desc(sum_White.alone_pct)) %>%
+  slice(c(1:10, (n() - 9):n()))
+
+white_ranking <- ggplot(white_ranked, aes(x = reorder(updatepknm, sum_White.alone_pct), 
+                         y = sum_White.alone_pct, 
+                         fill = sum_White.alone_pct)) +
+  geom_bar(stat = "identity") +
+  scale_fill_gradient(low = "#ffeda0", high = "#f03b20") +
+  coord_flip() +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0, margin = margin(b = 10)),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12),
+    legend.position = "bottom"
+  ) +
+  ggtitle("Parks Ranked by % White Population (Top and Bottom 10)") +
+  xlab("Park Name") +
+  ylab("% White Population")
+
+# ---------- GRAPH 4: Parks Ranked by Asian Population Index ----------
+asian_ranked <- attached_df %>%
+  arrange(desc(sum_Asian.alone_pct)) %>%
+  slice(c(1:10, (n() - 9):n()))
+
+asian_ranking <- ggplot(asian_ranked, aes(x = reorder(updatepknm, sum_Asian.alone_pct), 
+                         y = sum_Asian.alone_pct, 
+                         fill = sum_Asian.alone_pct)) +
+  geom_bar(stat = "identity") +
+  scale_fill_gradient(low = "#ffeda0", high = "#f03b20") +
+  coord_flip() +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0, margin = margin(b = 10)),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12),
+    legend.position = "bottom"
+  ) +
+  ggtitle("Parks Ranked by % Asian Population (Top and Bottom 10)") +
+  xlab("Park Name") +
+  ylab("% Asian Population Index")
+
+# ---------- GRAPH 6: Poverty vs. Vacancy Scatter Plot with Diverging Blues ----------
+poverty_vs_vacancy <- ggplot(attached_df, aes(x = sum_Below.poverty.level._pct, y = sum_Vacant_pct, color = sum_Vacant_pct)) +
+  geom_point(alpha = 0.7, size = 4) +
+  geom_smooth(method = "lm", color = "darkgray", se = FALSE) +
+  stat_cor(method = "pearson", label.x = 0.5, label.y = 2.5, size = 5) +
+  scale_color_gradient(low = "#deebf7", high = "#3182bd") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0, margin = margin(b = 10)),
+    axis.text = element_text(size = 12),
+    axis.title = element_text(size = 14),
+    legend.position = "bottom"
+  ) +
+  ggtitle("Poverty vs. Vacancy in Park Walksheds") +
+  xlab("% Below Poverty Line") +
+  ylab("% Vacant Parcels") 
+
+# Ensure the visualizations folder exists
+dir.create("visualizations", showWarnings = FALSE)
+
+# Function to save the graph
+save_graph <- function(plot, filename) {
+  ggsave(
+    filename = file.path("visualizations", filename), 
+    plot = plot, 
+    width = 10, 
+    height = 6, 
+    dpi = 300
+  )
+}
+
+age_ranked <- indexed_df %>%
+  arrange(desc(median_age)) %>%
+  slice(c(1:10, (n() - 9):n()))
+
+age <- ggplot(age_ranked, aes(x = reorder(updatepknm, median_age), y = median_age, fill = median_age)) +
+  geom_bar(stat = "identity") +
+  scale_fill_gradient(low = "#cce7ff", high = "#00509e") +
+  coord_flip() +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0, margin = margin(b = 10)),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12),
+    legend.position = "bottom"
+  ) +
+  ggtitle("Parks Ranked by Median Age (Top and Bottom 10)") +
+  xlab("Park Name") +
+  ylab("Median Age") +
+  labs(fill = "Median Age")
+
+poverty_ranked <- attached_df %>%
+  arrange(desc(sum_Below.poverty.level._pct)) %>%
+  slice(c(1:10, (n() - 9):n()))
+
+poverty <- ggplot(poverty_ranked, aes(x = reorder(updatepknm, sum_Below.poverty.level._pct), y = sum_Below.poverty.level._pct, fill = sum_Below.poverty.level._pct)) +
+  geom_bar(stat = "identity") +
+  scale_fill_gradient(low = "#cce7ff", high = "#00509e") +
+  coord_flip() +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0, margin = margin(b = 10)),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12),
+    legend.position = "bottom"
+  ) +
+  ggtitle("Parks Ranked by % Below Poverty Line (Top and Bottom 10)") +
+  xlab("Park Name") +
+  ylab("% Below Poverty Line") +
+  labs(fill = "% Below Poverty Line")
+
+# Save the graph
+save_graph(asian_ranking, "asian_population.png")
+save_graph(white_ranking, "white_population.png")
+save_graph(black_ranking, "black_population.png")
+save_graph(hispanic_ranking, "hispanic_population.png")
+save_graph(poverty_vs_age, "poverty_vs_age.png")
+save_graph(poverty_vs_vacancy, "poverty_vs_vacancy.png")
+save_graph(vacancy, "vacancy.png")
+save_graph(age, "age.png")
+save_graph(poverty, "poverty.png")
+
+asian_ranking
+white_ranking
+black_ranking
+hispanic_ranking
+poverty_vs_age
+poverty_vs_vacancy
+vacancy
+age
+poverty
+```
+```{r}
+library(sf)              # For reading and handling spatial data
+library(tidyverse)       # For data wrangling and plotting
+library(ggplot2)         # For creating plots
+library(tmap)            # For interactive and static geospatial maps
+
+# Load GeoJSON and CSV data
+geo_data <- st_read("attached_census.geojson")
+indexed_census <- read.csv("indexed_census.csv")
+#attached_census <- read.csv("attached_census.csv")
+
+# Merge spatial data with census data based on a common key (assuming 'updatepknm')
+geo_data <- geo_data %>% left_join(indexed_census, by = "updatepknm")
+
+# Set interactive mode
+tmap_mode("view")  
+
+# 1. Choropleth map of scaled Hispanic/Latino percentage
+hispanic_map <- tm_shape(geo_data) +
+  tm_polygons("sum_Hispanic.or.Latino_pct",
+              palette = "YlOrRd",
+              title = "Hispanic/Latino %") +
+  tm_layout(legend.outside = TRUE)
+
+# Save the interactive Hispanic/Latino map
+tmap_save(hispanic_map, "hispanic_map.html")
+
+# 2. Choropleth map of scaled vacancy percentages
+vacancy_map <- tm_shape(geo_data) +
+  tm_polygons("sum_Vacant_pct",
+              palette = "Blues",
+              title = "Vacancy %") +
+  tm_layout(legend.outside = TRUE)
+
+# Save the interactive Vacancy map
+tmap_save(vacancy_map, "vacancy_map.html")
+
+# 2. Choropleth map of scaled age index
+age_map <- tm_shape(geo_data) +
+  tm_polygons("median_age",
+              palette = "Blues",
+              title = "Median Age") +
+  tm_layout(legend.outside = TRUE)
+
+# Save the interactive age map
+tmap_save(age_map, "age_map.html")
+
+# 3. Create separate maps for each race demographic
+geo_data <- geo_data %>%
+  pivot_longer(cols = ends_with("pct"),
+               names_to = "variable",
+               values_to = "value") %>%
+  mutate(variable = recode(variable,
+                           "sum_Hispanic.or.Latino_pct" = "Hispanic/Latino %",
+                           "sum_White.alone_pct" = "White %",
+                           "sum_Black.or.African.American.alone_pct" = "Black/African American %",
+                           "sum_Asian.alone_pct" = "Asian %"))
+
+# Save each individual map for race categories separately
+race_categories <- unique(geo_data$variable)
+
+for (var in race_categories) {
+  race_map <- tm_shape(geo_data %>% filter(variable == var)) +
+    tm_polygons("value",
+                palette = "Viridis",
+                title = paste0(var, " %")) +
+    tm_layout(legend.outside = TRUE, main.title = var)
+  
+  # Save each race map separately
+  tmap_save(race_map, paste0(gsub("/", "_", var), "_map.html"))
+}
+
+# 4. Static map of population density (from attached_census)
+geo_data <- geo_data %>% left_join(attached_census, by = "updatepknm")
+
+ggplot(geo_data) +
+  geom_sf(aes(fill = sum_Total.x), color = NA) +
+  scale_fill_viridis_c(option = "plasma", trans = "sqrt") +
+  labs(title = "Population Density by Park Area",
+       fill = "Population") +
+  theme_minimal()
+
+# Save the static map to file
+ggsave("population_density_map.png")
+```
+
+```{r}
+# Load required libraries
+library(ggplot2)
+library(ggcorrplot)
+
+# Read the dataset
+df <- read.csv("indexed_census.csv")
+
+# Remove rank variables (columns containing "rank" in their names)
+df <- df[, !grepl("rank", names(df))]
+
+# Select only numerical columns for correlation analysis
+num_cols <- df[, sapply(df, is.numeric)]
+
+# Compute correlation matrix
+cor_matrix <- cor(num_cols, use = "complete.obs")
+
+# Create a readable correlation heatmap
+heatmap_plot <- ggcorrplot(cor_matrix, 
+                           method = "square", 
+                           type = "lower", 
+                           lab = TRUE, 
+                           lab_size = 5, 
+                           colors = c("blue", "white", "red"), 
+                           outline.color = "black",
+                           title = "Correlation Heatmap", 
+                           show.legend = TRUE,
+                           tl.cex = 14,  # Increase axis text size for readability
+                           ggtheme = theme_minimal())
+
+# Save the heatmap as an image
+ggsave("correlation_heatmap.png", plot = heatmap_plot, width = 10, height = 8, dpi = 300)
+
+# Display the plot
+print(heatmap_plot)
+
+```
+```{r}
+# Load required libraries
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+
+# Calculate diversity score excluding poverty and vacancy
+df$diversity_score <- df$scaled_index_sum_Hispanic.or.Latino_pct +
+                      df$scaled_index_sum_White.alone_pct +
+                      df$scaled_index_sum_Black.or.African.American.alone_pct +
+                      df$scaled_index_sum_Asian.alone_pct
+
+# Sort by diversity score in descending order
+df <- df %>% arrange(desc(diversity_score))
+
+# Print the top 10 parks
+print(df %>% select(updatepknm, diversity_score) %>% head(10))
+
+# Create a visualization of the top 10 parks
+
+# 1. Bar chart of overall diversity scores
+p1 <- ggplot(df %>% head(10), aes(x = reorder(updatepknm, diversity_score), y = diversity_score)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  coord_flip() +
+  labs(title = "Top 10 Parks by Diversity Score",
+       x = "Park Name",
+       y = "Diversity Score") +
+  theme_minimal()
+
+print(p1)
+
+# 2. Stacked bar chart showing the composition of each score
+df_long <- df %>%
+  head(10) %>%
+  pivot_longer(
+    cols = c("scaled_index_sum_Hispanic.or.Latino_pct",
+             "scaled_index_sum_White.alone_pct",
+             "scaled_index_sum_Black.or.African.American.alone_pct",
+             "scaled_index_sum_Asian.alone_pct"),  # Only racial categories included
+    names_to = "demographic_group",
+    values_to = "score"
+  ) %>%
+  mutate(demographic_group = gsub("scaled_index_sum_", "", demographic_group),
+         demographic_group = gsub("_pct", "", demographic_group))
+
+p2 <- ggplot(df_long, aes(x = reorder(updatepknm, diversity_score), y = score, fill = demographic_group)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  labs(title = "Diversity Score Components by Park",
+       x = "Park Name",
+       y = "Score Component",
+       fill = "Demographic Group") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set2")
+
+print(p2)
+
+ggsave("diversity_score_ranking.png", p1, width = 10, height = 8)
+ggsave("diversity_score_components.png", p2, width = 10, height = 8)
+
+```
+
+

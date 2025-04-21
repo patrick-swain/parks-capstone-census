@@ -1,0 +1,206 @@
+---
+title: "Census Data Cleaning"
+output: pdf_document
+date: "2025-01-23"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list = ls())
+```
+
+```{r}
+library(dplyr)
+library(stringr)
+library(janitor)
+```
+```{r}
+race.raw <- read.csv("Census 2020 Race by Tract.csv")
+age <- read.csv("Census ACS 2023 5-year est Age and Sex by Tract.csv")
+poverty <- read.csv("Census ACS 2023 5-year est Poverty by Tract.csv")
+vacancy <- read.csv("Census 2020 Vacancy by Block.csv")
+```
+
+```{r}
+# Transpose race data
+race <- t(race.raw)
+race <- as.data.frame(race)
+# Convert row names to tract column
+race <- data.frame(NAME = rownames(race), race, row.names = NULL)
+```
+
+```{r}
+# Standardize tract names
+
+extract_tract_number <- function(name) {
+  # Extract the "Census Tract \\d+\\.?\\d*" portion
+  tract_portion <- str_extract(name, "Census.?Tract.?\\d+\\.?\\d*")
+  
+  # If found, extract just the numeric tract number
+  if (!is.na(tract_portion)) {
+    tract_number <- str_extract(tract_portion, "\\d+\\.?\\d*")
+    
+    # Remove any leading zeros
+    tract_number <- str_replace_all(tract_number, "^0+", "")
+    # Command to remove trailing period from race tracts???
+    
+    return(tract_number)
+  }
+  
+  # If not found, return NA
+  return(NA_character_)
+}
+
+extract_census_tract <- function(df) {
+  df$tract_number <- sapply(df$NAME, extract_tract_number)
+  df <- dplyr::relocate(df, tract_number, .before = 1)
+  df$tract_number <- gsub("\\.", "", df$tract_number)
+  return(df)
+}
+
+race <- extract_census_tract(race)
+age <- extract_census_tract(age)
+poverty <- extract_census_tract(poverty)
+vacancy <- extract_census_tract(vacancy)
+
+```
+
+```{r}
+# Rename vacancy columns and remove extraneous columns
+
+vacancy <- vacancy[, -which(names(vacancy) == "GEO_ID")]
+vacancy <- vacancy[, -which(names(vacancy) == "NAME")]
+vacancy <- vacancy[, -which(names(vacancy) == "X")]
+
+vacancy <- vacancy[-c(1), ]
+colnames(vacancy) <- c("tract_number", "Total","Occupied","Vacant")
+
+# Summarize vacancy data based on tract
+
+vacancy <- vacancy %>%
+  mutate(
+    Total = as.numeric(Total),
+    Occupied = as.numeric(Occupied),
+    Vacant = as.numeric(Vacant)
+  )
+vacancy <- vacancy %>%
+  group_by(tract_number) %>%
+  summarize(
+    Total = sum(Total, na.rm = TRUE),
+    Occupied = sum(Occupied, na.rm = TRUE),
+    Vacant = sum(Vacant, na.rm = TRUE)
+  )
+```
+
+```{r}
+# Rename race columns and remove extraneous columns
+colnames(race) <- race[1,]
+race <- race[-1, ] 
+colnames(race)[1] <- "tract_number"
+# Rename age columns and remove extraneous columns
+colnames(age) <- age[1,]
+age <- age[-1, ] 
+colnames(age)[1] <- "tract_number"
+# Rename poverty columns and remove extraneous columns
+colnames(poverty) <- poverty[1,]
+poverty <- poverty[-1, ] 
+colnames(poverty)[1] <- "tract_number"
+```
+
+```{r}
+# Horizontally combine dataframes based on tract
+
+combined_data <- race %>%
+  full_join(vacancy, by = "tract_number") %>%
+  full_join(poverty, by = "tract_number") %>%
+  full_join(age, by = "tract_number")
+```
+
+```{r}
+# Drop columns with lots of missing values 
+
+missing_data <- colSums(is.na(combined_data)) / nrow(combined_data) * 100
+
+# Define thresholds
+high_missing_threshold <- 50  # Columns with more than 50% missing values
+low_variance_threshold <- 1   # Columns with only one unique value
+
+# Identify columns to drop
+columns_to_drop <- names(combined_data)[missing_data > high_missing_threshold]
+
+# Drop unnecessary columns
+combined_data <- combined_data %>%
+  select(-all_of(columns_to_drop))
+
+# Drop margin of error columns
+combined_data <- combined_data %>%
+  select(-contains("Margin of Error"))
+```
+
+```{r}
+# Find latitude and longitude to correspond to each census tract
+library(tidyr)
+
+# .txt from Census (https://www.census.gov/geographies/reference-files/time-series/geo/centers-population.html)converted to .csv
+tractcoords <- read.csv("CenPop2020_Mean_TR42.csv")
+
+# Separate single column into six columns
+tractcoords <- tractcoords %>%
+separate(
+    col = 1,  # First column
+    into = c("STATEFP", "COUNTYFP", "TRACTCE", "POPULATION", "LATITUDE", "LONGITUDE"),
+    sep = ",",
+    convert = TRUE
+  ) %>%
+  mutate(
+    LATITUDE = as.numeric(str_remove(LATITUDE, "\\+")),
+    LONGITUDE = as.numeric(LONGITUDE)
+  )
+
+# Rename tract name column
+colnames(tractcoords)[colnames(tractcoords) == "TRACTCE"] <- "tract_number"
+
+tractcoords$tract_number <- as.numeric(tractcoords$tract_number)
+combined_data$tract_number <- as.numeric(combined_data$tract_number)
+
+combined_data <- combined_data %>%
+  full_join(tractcoords, by = "tract_number")
+
+```
+
+```{r}
+# Save combined dataset
+write.csv(combined_data, "combined_data.csv", row.names = FALSE)
+cleaned_data <- read.csv("cleaned_data.csv")
+```
+
+# Select relevant columns
+#cleaned_data <- subset(combined_data, select = c(
+  "tract_number", "Label..Grouping.", "Total",
+  "Hispanic or Latino", "Not Hispanic or Latino",
+  "White alone", "Black or African American alone",
+  "American Indian and Alaska Native alone", "Asian alone",
+  "Native Hawaiian and Other Pacific Islander alone",
+  "Some Other Race alone", "Population of two races",
+  "Total", "Vacant", "Occupied",
+  "Estimate!!Total!!Population for whom poverty status is determined",
+  "Estimate!!Total!!Total population!!AGE!!Under 5 years",
+  "Estimate!!Total!!Total population!!AGE!!5 to 9 years",
+  "Estimate!!Total!!Total population!!AGE!!10 to 14 years",
+  "Estimate!!Total!!Total population!!AGE!!15 to 19 years",
+  "Estimate!!Total!!Total population!!AGE!!20 to 24 years",
+  "Estimate!!Total!!Total population!!AGE!!25 to 29 years",
+  "Estimate!!Total!!Total population!!AGE!!30 to 34 years",
+  "Estimate!!Total!!Total population!!AGE!!35 to 39 years",
+  "Estimate!!Total!!Total population!!AGE!!40 to 44 years",
+  "Estimate!!Total!!Total population!!AGE!!45 to 49 years",
+  "Estimate!!Total!!Total population!!AGE!!50 to 54 years",
+  "Estimate!!Total!!Total population!!AGE!!55 to 59 years",
+  "Estimate!!Total!!Total population!!AGE!!60 to 64 years",
+  "Estimate!!Total!!Total population!!AGE!!65 to 69 years",
+  "Estimate!!Total!!Total population!!AGE!!70 to 74 years",
+  "Estimate!!Total!!Total population!!AGE!!75 to 79 years",
+  "Estimate!!Total!!Total population!!AGE!!80 to 84 years",
+  "Estimate!!Total!!Total population!!AGE!!85 years and over"
+))
+
